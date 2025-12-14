@@ -1,6 +1,4 @@
--- Миграция для инициализации базы данных
--- Создание таблиц threads и messages согласно спецификации
-
+-- UP MIGRATION
 CREATE TABLE IF NOT EXISTS threads (
   id INTEGER PRIMARY KEY,
   title TEXT
@@ -13,3 +11,6 @@ CREATE TABLE IF NOT EXISTS messages (
   assistant_message TEXT
 );
 
+-- DOWN MIGRATION
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS threads;

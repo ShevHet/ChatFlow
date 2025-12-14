@@ -1,51 +1,57 @@
-/**
- * Интеграционные тесты для API /api/messages
- */
-
 import { GET, POST } from "@/app/api/messages/route";
-import { NextRequest } from "next/server";
-
-// Мокаем базу данных перед импортом
-const mockDb = {
-  prepare: jest.fn((sql: string) => ({
-    run: jest.fn((...params: any[]) => {
-      if (sql.includes("INSERT")) {
-        return { lastInsertRowId: 1 };
-      }
-      return {};
-    }),
-    all: jest.fn(() => []),
-    get: jest.fn(() => null),
-  })),
-};
+import { getDatabase } from "@/lib/db";
 
 jest.mock("@/lib/db", () => {
+  const Database = require("better-sqlite3");
+  const db = new Database(":memory:");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+    CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      threadId INTEGER NOT NULL,
+      sender TEXT NOT NULL,
+      message TEXT NOT NULL,
+      timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+      FOREIGN KEY (threadId) REFERENCES threads(id) ON DELETE CASCADE
+    );
+  `);
+  
   return {
-    getDatabase: () => mockDb,
+    getDatabase: () => db,
   };
 });
 
-import { getDatabase } from "@/lib/db";
-
 describe("API /api/messages", () => {
-  let threadId: number = 1;
+  let threadId: number;
 
   beforeEach(() => {
-    // Сбрасываем моки
-    jest.clearAllMocks();
+    const db = getDatabase();
+    db.exec("DELETE FROM messages");
+    db.exec("DELETE FROM threads");
     
-    // Настраиваем мок для prepare
-    (mockDb.prepare as jest.Mock).mockReturnValue({
-      run: jest.fn(() => ({ lastInsertRowId: 1 })),
-      all: jest.fn(() => []),
-      get: jest.fn(() => null),
-    });
+    const stmt = db.prepare("INSERT INTO threads (title) VALUES (?)");
+    const result = stmt.run("Test Thread");
+    threadId = Number(result.lastInsertRowid);
   });
 
   describe("GET", () => {
+    it("should return 400 when threadId is missing", async () => {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/messages"));
+      const response = await GET(request);
+      const data = await response.json();
+      
+      expect(response.status).toBe(400);
+      expect(data.error).toBe("threadId is required");
+    });
+
     it("should return empty array when no messages", async () => {
-      const url = new URL(`http://localhost:3000/api/messages?threadId=${threadId}`);
-      const request = new NextRequest(url);
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL(`http://localhost:3000/api/messages?threadId=${threadId}`));
       const response = await GET(request);
       const data = await response.json();
       
@@ -53,183 +59,51 @@ describe("API /api/messages", () => {
       expect(data).toEqual([]);
     });
 
-    it("should return all messages for thread", async () => {
-      // Настраиваем мок для возврата сообщений
-      (mockDb.prepare as jest.Mock).mockReturnValue({
-        run: jest.fn(() => ({ lastInsertRowId: 1 })),
-        all: jest.fn(() => [
-          { id: 1, thread_id: threadId, user_message: "Hello", assistant_message: "Hi there!" },
-          { id: 2, thread_id: threadId, user_message: "How are you?", assistant_message: "I'm fine" },
-        ]),
-        get: jest.fn(() => null),
-      });
+    it("should return messages for a thread", async () => {
+      const db = getDatabase();
+      const stmt = db.prepare(
+        "INSERT INTO messages (threadId, sender, message) VALUES (?, ?, ?)"
+      );
+      stmt.run(threadId, "user", "Hello");
+      stmt.run(threadId, "assistant", "Hi there");
 
-      const url = new URL(`http://localhost:3000/api/messages?threadId=${threadId}`);
-      const request = new NextRequest(url);
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL(`http://localhost:3000/api/messages?threadId=${threadId}`));
       const response = await GET(request);
       const data = await response.json();
       
       expect(response.status).toBe(200);
       expect(data).toHaveLength(2);
-      expect(data[0].user_message).toBe("Hello");
-      expect(data[0].assistant_message).toBe("Hi there!");
-      expect(data[1].user_message).toBe("How are you?");
-      expect(data[1].assistant_message).toBe("I'm fine");
-    });
-
-    it("should return only messages for specified thread", async () => {
-      // Настраиваем мок для возврата только сообщений первого треда
-      (mockDb.prepare as jest.Mock).mockReturnValue({
-        run: jest.fn(() => ({ lastInsertRowId: 1 })),
-        all: jest.fn(() => [
-          { id: 1, thread_id: threadId, user_message: "Message 1", assistant_message: "Response 1" },
-        ]),
-        get: jest.fn(() => null),
-      });
-
-      const url = new URL(`http://localhost:3000/api/messages?threadId=${threadId}`);
-      const request = new NextRequest(url);
-      const response = await GET(request);
-      const data = await response.json();
-      
-      expect(response.status).toBe(200);
-      expect(data).toHaveLength(1);
-      expect(data[0].user_message).toBe("Message 1");
-    });
-
-    it("should return 400 if threadId is missing", async () => {
-      const url = new URL("http://localhost:3000/api/messages");
-      const request = new NextRequest(url);
-      const response = await GET(request);
-      
-      expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error).toBe("threadId is required");
-    });
-
-    it("should handle null message values", async () => {
-      // Настраиваем мок для возврата сообщения с null
-      (mockDb.prepare as jest.Mock).mockReturnValue({
-        run: jest.fn(() => ({ lastInsertRowId: 1 })),
-        all: jest.fn(() => [
-          { id: 1, thread_id: threadId, user_message: null, assistant_message: "Response only" },
-        ]),
-        get: jest.fn(() => null),
-      });
-
-      const url = new URL(`http://localhost:3000/api/messages?threadId=${threadId}`);
-      const request = new NextRequest(url);
-      const response = await GET(request);
-      const data = await response.json();
-      
-      expect(response.status).toBe(200);
-      expect(data).toHaveLength(1);
-      expect(data[0].user_message).toBeNull();
-      expect(data[0].assistant_message).toBe("Response only");
+      expect(data[0].message).toBe("Hello");
+      expect(data[1].message).toBe("Hi there");
     });
   });
 
   describe("POST", () => {
-    it("should create a new message", async () => {
-      // Настраиваем мок для INSERT и SELECT
-      (mockDb.prepare as jest.Mock).mockImplementation((sql: string) => {
-        if (sql.includes("INSERT")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => null),
-          };
-        } else if (sql.includes("SELECT") && sql.includes("WHERE id")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({
-              id: 1,
-              thread_id: threadId,
-              user_message: "Test message",
-              assistant_message: "Test response",
-            })),
-          };
-        }
-        return {
-          run: jest.fn(() => ({ lastInsertRowId: 1 })),
-          all: jest.fn(() => []),
-          get: jest.fn(() => null),
-        };
-      });
-
-      const url = new URL("http://localhost:3000/api/messages");
-      const request = new NextRequest(url, {
+    it("should return 400 when required fields are missing", async () => {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/messages"), {
         method: "POST",
-        body: JSON.stringify({
-          threadId,
-          userMessage: "Test message",
-          assistantMessage: "Test response",
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
       });
 
       const response = await POST(request);
       const data = await response.json();
-      
-      expect(response.status).toBe(200);
-      expect(data.thread_id).toBe(threadId);
-      expect(data.user_message).toBe("Test message");
-      expect(data.assistant_message).toBe("Test response");
-      expect(data.id).toBeDefined();
-    });
-
-    it("should return 400 if threadId is missing", async () => {
-      const url = new URL("http://localhost:3000/api/messages");
-      const request = new NextRequest(url, {
-        method: "POST",
-        body: JSON.stringify({
-          userMessage: "Test",
-          assistantMessage: "Response",
-        }),
-      });
-
-      const response = await POST(request);
       
       expect(response.status).toBe(400);
-      const data = await response.json();
-      expect(data.error).toBe("threadId is required");
+      expect(data.error).toBe("threadId, sender, and message are required");
     });
 
-    it("should allow null values for messages", async () => {
-      // Настраиваем мок для INSERT и SELECT
-      (mockDb.prepare as jest.Mock).mockImplementation((sql: string) => {
-        if (sql.includes("INSERT")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => null),
-          };
-        } else if (sql.includes("SELECT") && sql.includes("WHERE id")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({
-              id: 1,
-              thread_id: threadId,
-              user_message: null,
-              assistant_message: "Response only",
-            })),
-          };
-        }
-        return {
-          run: jest.fn(() => ({ lastInsertRowId: 1 })),
-          all: jest.fn(() => []),
-          get: jest.fn(() => null),
-        };
-      });
-
-      const url = new URL("http://localhost:3000/api/messages");
-      const request = new NextRequest(url, {
+    it("should create a new message", async () => {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/messages"), {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           threadId,
-          userMessage: null,
-          assistantMessage: "Response only",
+          sender: "user",
+          message: "Test message",
         }),
       });
 
@@ -237,55 +111,9 @@ describe("API /api/messages", () => {
       const data = await response.json();
       
       expect(response.status).toBe(200);
-      expect(data.user_message).toBeNull();
-      expect(data.assistant_message).toBe("Response only");
-    });
-
-    it("should create message with only user message", async () => {
-      // Настраиваем мок для INSERT и SELECT
-      (mockDb.prepare as jest.Mock).mockImplementation((sql: string) => {
-        if (sql.includes("INSERT")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => null),
-          };
-        } else if (sql.includes("SELECT") && sql.includes("WHERE id")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({
-              id: 1,
-              thread_id: threadId,
-              user_message: "User only",
-              assistant_message: null,
-            })),
-          };
-        }
-        return {
-          run: jest.fn(() => ({ lastInsertRowId: 1 })),
-          all: jest.fn(() => []),
-          get: jest.fn(() => null),
-        };
-      });
-
-      const url = new URL("http://localhost:3000/api/messages");
-      const request = new NextRequest(url, {
-        method: "POST",
-        body: JSON.stringify({
-          threadId,
-          userMessage: "User only",
-          assistantMessage: null,
-        }),
-      });
-
-      const response = await POST(request);
-      const data = await response.json();
-      
-      expect(response.status).toBe(200);
-      expect(data.user_message).toBe("User only");
-      expect(data.assistant_message).toBeNull();
+      expect(data.message).toBe("Test message");
+      expect(data.sender).toBe("user");
+      expect(data.threadId).toBe(threadId);
     });
   });
 });
-

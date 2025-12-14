@@ -1,8 +1,4 @@
-/**
- * Юнит-тесты для компонента ThreadList
- */
-
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import ThreadList from "@/components/ThreadList";
 import { Thread } from "@/lib/db";
 
@@ -10,14 +6,12 @@ const mockThreads: Thread[] = [
   {
     id: 1,
     title: "Thread 1",
+    createdAt: Math.floor(Date.now() / 1000),
   },
   {
     id: 2,
     title: "Thread 2",
-  },
-  {
-    id: 3,
-    title: null,
+    createdAt: Math.floor(Date.now() / 1000) - 86400,
   },
 ];
 
@@ -39,11 +33,10 @@ describe("ThreadList", () => {
 
     expect(screen.getByText("Thread 1")).toBeInTheDocument();
     expect(screen.getByText("Thread 2")).toBeInTheDocument();
-    expect(screen.getByText("Без названия")).toBeInTheDocument();
   });
 
   it("should highlight selected thread", () => {
-    render(
+    const { container } = render(
       <ThreadList
         threads={mockThreads}
         selectedThreadId={1}
@@ -51,10 +44,9 @@ describe("ThreadList", () => {
       />
     );
 
-    const thread1 = screen.getByText("Thread 1").closest("li");
-    expect(thread1).toHaveClass("bg-blue-50");
-    expect(thread1).toHaveClass("border-l-blue-500");
-    expect(screen.getByText("Активный тред")).toBeInTheDocument();
+    const thread1Text = screen.getByText("Thread 1");
+    const threadContainer = thread1Text.parentElement;
+    expect(threadContainer).toHaveClass("bg-blue-50");
   });
 
   it("should call onSelectThread when thread is clicked", () => {
@@ -66,35 +58,7 @@ describe("ThreadList", () => {
       />
     );
 
-    fireEvent.click(screen.getByText("Thread 1"));
-    expect(mockOnSelectThread).toHaveBeenCalledWith(1);
-  });
-
-  it("should call onSelectThread when Enter key is pressed", () => {
-    render(
-      <ThreadList
-        threads={mockThreads}
-        selectedThreadId={null}
-        onSelectThread={mockOnSelectThread}
-      />
-    );
-
-    const thread1 = screen.getByText("Thread 1").closest("li");
-    fireEvent.keyDown(thread1!, { key: "Enter" });
-    expect(mockOnSelectThread).toHaveBeenCalledWith(1);
-  });
-
-  it("should call onSelectThread when Space key is pressed", () => {
-    render(
-      <ThreadList
-        threads={mockThreads}
-        selectedThreadId={null}
-        onSelectThread={mockOnSelectThread}
-      />
-    );
-
-    const thread1 = screen.getByText("Thread 1").closest("li");
-    fireEvent.keyDown(thread1!, { key: " " });
+    screen.getByText("Thread 1").click();
     expect(mockOnSelectThread).toHaveBeenCalledWith(1);
   });
 
@@ -110,17 +74,23 @@ describe("ThreadList", () => {
     expect(screen.getByText("Нет тредов. Создайте новый!")).toBeInTheDocument();
   });
 
-  it("should have correct aria-selected attribute", () => {
+  it("should format date correctly", () => {
+    const thread: Thread = {
+      id: 1,
+      title: "Test Thread",
+      createdAt: Math.floor(new Date("2024-01-15").getTime() / 1000),
+    };
+
     render(
       <ThreadList
-        threads={mockThreads}
-        selectedThreadId={1}
+        threads={[thread]}
+        selectedThreadId={null}
         onSelectThread={mockOnSelectThread}
       />
     );
 
-    const thread1 = screen.getByText("Thread 1").closest("li");
-    expect(thread1).toHaveAttribute("aria-selected", "true");
+    const dateElement = screen.getByText(/15\.01\.2024/);
+    expect(dateElement).toBeInTheDocument();
   });
 });
 

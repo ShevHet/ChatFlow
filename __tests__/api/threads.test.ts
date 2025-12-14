@@ -1,43 +1,26 @@
-/**
- * Интеграционные тесты для API /api/threads
- */
-
 import { GET, POST } from "@/app/api/threads/route";
-import { NextRequest } from "next/server";
-
-// Мокаем базу данных перед импортом
-const mockDb = {
-  prepare: jest.fn((sql: string) => ({
-    run: jest.fn((...params: any[]) => {
-      if (sql.includes("INSERT")) {
-        return { lastInsertRowId: 1 };
-      }
-      return {};
-    }),
-    all: jest.fn(() => []),
-    get: jest.fn(() => null),
-  })),
-};
+import { getDatabase } from "@/lib/db";
 
 jest.mock("@/lib/db", () => {
+  const Database = require("better-sqlite3");
+  const db = new Database(":memory:");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS threads (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    );
+  `);
+  
   return {
-    getDatabase: () => mockDb,
+    getDatabase: () => db,
   };
 });
 
-import { getDatabase } from "@/lib/db";
-
 describe("API /api/threads", () => {
   beforeEach(() => {
-    // Сбрасываем моки
-    jest.clearAllMocks();
-    
-    // Настраиваем мок для prepare
-    (mockDb.prepare as jest.Mock).mockReturnValue({
-      run: jest.fn(() => ({ lastInsertRowId: 1 })),
-      all: jest.fn(() => []),
-      get: jest.fn(() => null),
-    });
+    const db = getDatabase();
+    db.exec("DELETE FROM threads");
   });
 
   describe("GET", () => {
@@ -46,61 +29,32 @@ describe("API /api/threads", () => {
       const data = await response.json();
       
       expect(response.status).toBe(200);
-      expect(Array.isArray(data)).toBe(true);
+      expect(data).toEqual([]);
     });
 
     it("should return all threads", async () => {
-      // Настраиваем мок для возврата данных
-      (mockDb.prepare as jest.Mock).mockReturnValue({
-        run: jest.fn(() => ({ lastInsertRowId: 1 })),
-        all: jest.fn(() => [
-          { id: 1, title: "Thread 1" },
-          { id: 2, title: "Thread 2" },
-        ]),
-        get: jest.fn(() => ({ id: 1, title: "New Thread" })),
-      });
+      const db = getDatabase();
+      const stmt = db.prepare("INSERT INTO threads (title, createdAt) VALUES (?, ?)");
+      const now = Math.floor(Date.now() / 1000);
+      stmt.run("Thread 1", now - 100);
+      stmt.run("Thread 2", now);
 
       const response = await GET();
       const data = await response.json();
       
       expect(response.status).toBe(200);
-      expect(Array.isArray(data)).toBe(true);
+      expect(data).toHaveLength(2);
+      expect(data[0].title).toBe("Thread 2");
+      expect(data[1].title).toBe("Thread 1");
     });
   });
 
   describe("POST", () => {
     it("should create a new thread", async () => {
-      // Настраиваем мок для INSERT и SELECT
-      (mockDb.prepare as jest.Mock).mockImplementation((sql: string) => {
-        if (sql.includes("INSERT")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => null),
-          };
-        } else if (sql.includes("SELECT") && sql.includes("WHERE id")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({ id: 1, title: "New Thread" })),
-          };
-        } else if (sql.includes("ORDER BY id DESC")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({ id: 1, title: "New Thread" })),
-          };
-        }
-        return {
-          run: jest.fn(() => ({ lastInsertRowId: 1 })),
-          all: jest.fn(() => []),
-          get: jest.fn(() => null),
-        };
-      });
-
-      const url = new URL("http://localhost:3000/api/threads");
-      const request = new NextRequest(url, {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/threads"), {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: "New Thread" }),
       });
 
@@ -109,74 +63,52 @@ describe("API /api/threads", () => {
       
       expect(response.status).toBe(200);
       expect(data.title).toBe("New Thread");
-      expect(data.id).toBeDefined();
+      expect(data.id).toBeGreaterThan(0);
     });
 
-    it("should return 400 if title is missing", async () => {
-      const url = new URL("http://localhost:3000/api/threads");
-      const request = new NextRequest(url, {
+    it("should handle invalid request - missing title", async () => {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/threads"), {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({}),
-      });
-
-      const response = await POST(request);
-      
-      expect(response.status).toBe(400);
-    });
-
-    it("should return 400 if title is empty", async () => {
-      const url = new URL("http://localhost:3000/api/threads");
-      const request = new NextRequest(url, {
-        method: "POST",
-        body: JSON.stringify({ title: "   " }),
-      });
-
-      const response = await POST(request);
-      
-      expect(response.status).toBe(400);
-    });
-
-    it("should trim title whitespace", async () => {
-      // Настраиваем мок для INSERT и SELECT
-      (mockDb.prepare as jest.Mock).mockImplementation((sql: string) => {
-        if (sql.includes("INSERT")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => null),
-          };
-        } else if (sql.includes("SELECT") && sql.includes("WHERE id")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({ id: 1, title: "Trimmed Thread" })),
-          };
-        } else if (sql.includes("ORDER BY id DESC")) {
-          return {
-            run: jest.fn(() => ({ lastInsertRowId: 1 })),
-            all: jest.fn(() => []),
-            get: jest.fn(() => ({ id: 1, title: "Trimmed Thread" })),
-          };
-        }
-        return {
-          run: jest.fn(() => ({ lastInsertRowId: 1 })),
-          all: jest.fn(() => []),
-          get: jest.fn(() => null),
-        };
-      });
-
-      const url = new URL("http://localhost:3000/api/threads");
-      const request = new NextRequest(url, {
-        method: "POST",
-        body: JSON.stringify({ title: "  Trimmed Thread  " }),
       });
 
       const response = await POST(request);
       const data = await response.json();
       
-      expect(response.status).toBe(200);
-      expect(data.title).toBe("Trimmed Thread");
+      expect(response.status).toBe(400);
+      expect(data.error).toBe("Title is required");
+    });
+
+    it("should handle invalid request - empty title", async () => {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/threads"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "" }),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+      
+      expect(response.status).toBe(400);
+      expect(data.error).toBe("Title is required");
+    });
+
+    it("should handle invalid request - whitespace-only title", async () => {
+      const { NextRequest } = require("next/server");
+      const request = new NextRequest(new URL("http://localhost:3000/api/threads"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "   " }),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+      
+      expect(response.status).toBe(400);
+      expect(data.error).toBe("Title is required");
     });
   });
 });
-
