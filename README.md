@@ -7,39 +7,36 @@
 - **Next.js 16** - React фреймворк
 - **TypeScript** - Типизация
 - **SQLite (better-sqlite3)** - База данных
-- **Vercel AI SDK** - Интеграция с AI моделями
-- **npm/pnpm** - Пакетный менеджер
+- **Tailwind CSS** - Стилизация
+- **Bun** - Пакетный менеджер и runtimeс
+- **Vercel AI SDK** - Интеграция с AI моделями и стриминг
+- **Zod** - Валидация схем для tools
 
 ## Установка
 
-1. **Установите зависимости:**
+1. **Инициализация проекта:**
    ```bash
-   npm install
-   ```
-   
-   Или используйте pnpm:
-   ```bash
-   pnpm install
+   bun init
    ```
 
-2. **Создайте файл `.env.local`** в корне проекта и добавьте ваш OpenAI API ключ:
+2. **Установите зависимости:**
+   ```bash
+   bun add next react react-dom typescript @tailwindcss/forms ai @ai-sdk/openai zod
+   ```
+
+3. **Создайте файл `.env.local`** в корне проекта и добавьте ваш OpenAI API ключ (если требуется):
    ```
    OPENAI_API_KEY=your_openai_api_key_here
    ```
 
-3. **Запустите проект в режиме разработки:**
+4. **Запустите проект в режиме разработки:**
    ```bash
-   npm run dev
-   ```
-   
-   Или с pnpm:
-   ```bash
-   pnpm dev
+   bun run dev
    ```
 
-4. Откройте [http://localhost:3000](http://localhost:3000) в браузере.
+5. Откройте [http://localhost:3000](http://localhost:3000) в браузере.
 
-**Примечание:** Проект использует `better-sqlite3` для работы с SQLite. База данных `chatflow.db` будет создана автоматически при первом запуске.
+**Примечание:** Проект использует `better-sqlite3` для работы с SQLite. База данных `db.sqlite` будет создана автоматически при первом запуске через миграции.
 
 ## Структура проекта
 
@@ -47,17 +44,32 @@
 ChatFlow/
 ├── app/
 │   ├── api/
-│   │   ├── chat/          # API для обработки сообщений с AI
-│   │   ├── threads/       # API для управления тредами
-│   │   └── messages/      # API для управления сообщениями
-│   ├── layout.tsx         # Корневой layout
-│   ├── page.tsx           # Главная страница
-│   └── globals.css        # Глобальные стили
+│   │   ├── ai-chat/              # API для AI чата со стримингом
+│   │   ├── chat/                 # API для сохранения сообщений
+│   │   ├── threads/              # API для управления тредами
+│   │   ├── messages/             # API для управления сообщениями
+│   │   └── excel/                # API для работы с Excel
+│   │       └── calculate/        # API для вычислений в Excel
+│   ├── layout.tsx                # Корневой layout
+│   ├── page.tsx                  # Главная страница
+│   └── globals.css               # Глобальные стили
 ├── components/
-│   ├── ChatInterface.tsx  # Компонент чата
-│   └── ThreadList.tsx     # Список тредов
+│   ├── ChatInterface.tsx         # Компонент чата
+│   ├── ThreadList.tsx            # Список тредов
+│   ├── ConfirmationDialog.tsx    # Модальное окно подтверждения
+│   └── ExcelViewer.tsx           # Просмотр Excel данных
 ├── lib/
-│   └── db.ts              # Работа с базой данных
+│   ├── db.ts                     # Работа с базой данных
+│   ├── migrate.ts                # Миграции БД
+│   ├── excel-service.ts          # Сервис для работы с Excel
+│   ├── excel-utils.ts            # Утилиты для Excel
+│   └── types.ts                  # TypeScript типы
+├── __tests__/                    # Тесты
+│   ├── lib/                      # Юнит-тесты
+│   └── api/                      # Интеграционные тесты
+├── docs/                         # Документация
+│   ├── API.md                    # API документация
+│   └── COMPONENTS.md             # Документация компонентов
 └── package.json
 ```
 
@@ -65,10 +77,17 @@ ChatFlow/
 
 - ✅ Создание и управление тредами
 - ✅ Отправка сообщений в чат
-- ✅ Интеграция с AI моделями через Vercel AI SDK
+- ✅ Интеграция с AI моделями через Vercel AI SDK (useChat)
+- ✅ Стриминг ответов от AI в реальном времени
 - ✅ Сохранение истории сообщений в SQLite
 - ✅ Загрузка истории при переключении тредов
-- ✅ Стриминг ответов от AI
+- ✅ Client-side tools для подтверждения действий (Generative UI)
+- ✅ Модальные окна с кнопками "Да"/"Нет" для опасных операций
+- ✅ Работа с Excel таблицами через tools
+- ✅ Чтение и запись данных в Excel файлы
+- ✅ Вычисления в Excel (сумма, среднее, минимум, максимум)
+- ✅ Архитектура по принципам SOLID
+- ✅ Полное покрытие тестами (юнит, интеграционные, E2E)
 
 ## Настройка AI модели
 
@@ -89,36 +108,52 @@ OPENAI_API_KEY=your_api_key_here
 
 Проект включает полную систему тестирования:
 
-- **Unit-тесты** (Jest + React Testing Library)
-- **Интеграционные тесты** (API роуты)
-- **E2E тесты** (Playwright)
+- **Unit-тесты** (Jest + React Testing Library) - для компонентов и утилит
+- **Интеграционные тесты** (Jest) - для API роутов и работы с БД
+- **E2E тесты** (Playwright) - для проверки всей функциональности
 
 ### Быстрый старт
 
 ```bash
 # Установите зависимости (включая тестовые)
-npm install
+bun install
 
 # Установите браузеры для Playwright
-npm run test:install-playwright
+bun run test:install-playwright
 
 # Запустите все тесты
-npm run test:all
+bun run test:all
 ```
 
 ### Доступные команды
 
 ```bash
 # Все unit и интеграционные тесты
-npm test
+bun test
 
 # С покрытием кода
-npm run test:coverage
+bun run test:coverage
 
 # Только E2E тесты
-npm run test:e2e
+bun run test:e2e
 
 # Все тесты (unit + E2E)
-npm run test:all
+bun run test:all
 ```
+
+## Документация
+
+Подробная документация доступна в папке `docs/`:
+
+- [API Документация](docs/API.md) - описание всех API эндпоинтов
+- [Документация компонентов](docs/COMPONENTS.md) - описание React компонентов и архитектуры
+
+## Архитектура
+
+Проект построен по принципам SOLID и чистой архитектуры:
+
+- **Разделение на слои**: UI, API, Service, Data
+- **Инкапсуляция**: бизнес-логика в сервисных слоях
+- **Разделение ответственности**: каждый модуль имеет одну задачу
+- **Расширяемость**: легко добавлять новые функции и tools
 

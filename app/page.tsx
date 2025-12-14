@@ -37,13 +37,27 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: `Новый тред ${new Date().toLocaleString()}` }),
       });
-      if (response.ok) {
-        const newThread = await response.json();
-        setThreads((prev) => [newThread, ...prev]);
-        setSelectedThreadId(newThread.id);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        console.error("Failed to create thread:", errorData);
+        alert(`Ошибка при создании треда: ${errorData.error || `HTTP ${response.status}`}`);
+        return;
       }
+      
+      const newThread = await response.json();
+      if (!newThread || !newThread.id) {
+        console.error("Invalid thread response:", newThread);
+        alert("Ошибка: получен некорректный ответ от сервера");
+        return;
+      }
+      
+      setThreads((prev) => [newThread, ...prev]);
+      setSelectedThreadId(newThread.id);
     } catch (error) {
       console.error("Failed to create thread:", error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      alert(`Ошибка при создании треда: ${errorMessage || "Неизвестная ошибка"}`);
     }
   };
 
@@ -54,7 +68,8 @@ export default function Home() {
           <h1 className="text-xl font-bold mb-4">ChatFlow</h1>
           <button
             onClick={handleCreateThread}
-            className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
+            className="w-full bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 active:bg-blue-700 transition-colors font-medium shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            aria-label="Создать новый тред"
           >
             + Новый тред
           </button>

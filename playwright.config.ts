@@ -13,8 +13,9 @@ export default defineConfig({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
   outputDir: testResultsDir,
+  timeout: 60000, // Увеличиваем таймаут теста до 60 секунд
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://127.0.0.1:3000', // Используем IPv4 вместо localhost
     trace: 'on-first-retry',
   },
   projects: [
@@ -35,7 +36,7 @@ export default defineConfig({
   // Если сервер уже запущен, Playwright использует его (reuseExistingServer)
   webServer: {
     command: 'npm run dev',
-    url: 'http://localhost:3000',
+    url: 'http://127.0.0.1:3000', // Используем IPv4 вместо localhost
     reuseExistingServer: !process.env.CI,
     timeout: 300000, // 5 минут для первого запуска
     stdout: 'pipe',

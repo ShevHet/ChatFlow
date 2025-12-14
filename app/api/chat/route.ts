@@ -1,40 +1,50 @@
-import { streamText, type CoreMessage } from "ai";
-import { openai } from "@ai-sdk/openai";
+import { NextRequest, NextResponse } from 'next/server';
+import { getDatabase } from '@/lib/db';
 
-export async function POST(req: Request) {
+export async function GET(req: NextRequest) {
   try {
-    const { messages, threadId } = await req.json();
-
-    if (!messages || !Array.isArray(messages) || messages.length === 0) {
-      return new Response("Messages are required", { status: 400 });
-    }
-
-    const lastMessage = messages[messages.length - 1];
-    if (!lastMessage || lastMessage.role !== "user") {
-      return new Response("Last message must be from user", { status: 400 });
-    }
-
-    const coreMessages: CoreMessage[] = messages.map((msg: { role: string; content: string }) => {
-      if (msg.role === "user") {
-        return { role: "user", content: msg.content };
-      } else if (msg.role === "assistant") {
-        return { role: "assistant", content: msg.content };
-      } else if (msg.role === "system") {
-        return { role: "system", content: msg.content };
-      }
-      return { role: "user", content: String(msg.content) };
-    });
-
-    const model = openai("gpt-3.5-turbo") as any;
+    const db = getDatabase();
+    const threadsRows = db.prepare('SELECT * FROM threads').all() as any[];
     
-    const result = await streamText({
-      model,
-      messages: coreMessages,
-    });
-
-    return result.toTextStreamResponse();
+    const threads = threadsRows.map((row) => ({
+      id: Number(row.id),
+      title: row.title,
+    }));
+    
+    return NextResponse.json(threads);
   } catch (error) {
-    console.error("Error in chat API:", error);
-    return new Response("Internal server error", { status: 500 });
+    console.error('Error fetching threads:', error);
+    return NextResponse.json({ error: 'Failed to fetch threads' }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { threadId, userMessage, assistantMessage } = await req.json();
+    
+    if (!threadId) {
+      return NextResponse.json({ error: 'threadId is required' }, { status: 400 });
+    }
+    
+    const db = getDatabase();
+    
+    if (assistantMessage && userMessage) {
+      const lastMessage = db.prepare(
+        'SELECT * FROM messages WHERE thread_id = ? AND user_message = ? AND assistant_message IS NULL ORDER BY id DESC LIMIT 1'
+      ).get(threadId, userMessage) as any;
+      
+      if (lastMessage) {
+        db.prepare('UPDATE messages SET assistant_message = ? WHERE id = ?').run(assistantMessage, lastMessage.id);
+        return NextResponse.json({ message: 'Message updated' });
+      }
+    }
+    
+    db.prepare('INSERT INTO messages (thread_id, user_message, assistant_message) VALUES (?, ?, ?)').run(
+      threadId, userMessage || null, assistantMessage || null);
+    
+    return NextResponse.json({ message: 'Message saved' });
+  } catch (error) {
+    console.error('Error saving message:', error);
+    return NextResponse.json({ error: 'Failed to save message' }, { status: 500 });
   }
 }

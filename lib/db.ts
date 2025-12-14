@@ -1,47 +1,23 @@
-import Database from "better-sqlite3";
+import Database from 'better-sqlite3';
+import { initializeDatabase } from './migrate';
 
 let db: Database.Database | null = null;
 
 export function getDatabase(): Database.Database {
   if (!db) {
-    db = new Database("chatflow.db");
-    initializeDatabase(db);
+    db = initializeDatabase('db.sqlite');
   }
   return db;
 }
 
-function initializeDatabase(database: Database.Database) {
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS threads (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      title TEXT NOT NULL,
-      createdAt INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      threadId INTEGER NOT NULL,
-      sender TEXT NOT NULL,
-      message TEXT NOT NULL,
-      timestamp INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-      FOREIGN KEY (threadId) REFERENCES threads(id) ON DELETE CASCADE
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_messages_threadId ON messages(threadId);
-    CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
-  `);
-}
-
 export interface Thread {
   id: number;
-  title: string;
-  createdAt: number;
+  title: string | null;
 }
 
 export interface Message {
   id: number;
-  threadId: number;
-  sender: "user" | "assistant";
-  message: string;
-  timestamp: number;
+  thread_id: number;
+  user_message: string | null;
+  assistant_message: string | null;
 }
