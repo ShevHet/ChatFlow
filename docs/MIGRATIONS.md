@@ -35,27 +35,27 @@ DROP TABLE IF EXISTS users;
 
 ### Применить все миграции
 ```bash
-bun run migrate
+npm run migrate
 ```
 
 ### Применить миграции до определенной версии
 ```bash
-bun run scripts/migrate.ts migrate 2
+npx tsx scripts/migrate.ts migrate 2
 ```
 
 ### Проверить статус миграций
 ```bash
-bun run migrate:status
+npm run migrate:status
 ```
 
 ### Откатить последнюю миграцию
 ```bash
-bun run migrate:rollback
+npm run migrate:rollback
 ```
 
 ### Откатить до определенной версии
 ```bash
-bun run scripts/migrate.ts rollback 1
+npx tsx scripts/migrate.ts rollback 1
 ```
 
 ## Автоматическое применение
@@ -67,7 +67,7 @@ bun run scripts/migrate.ts rollback 1
 1. Создайте файл в директории `migrations/` с форматом `{номер}_{название}.sql`
 2. Номер должен быть больше всех существующих номеров
 3. Добавьте блоки UP и DOWN MIGRATION
-4. Запустите `bun run migrate` для применения
+4. Запустите `npm run migrate` для применения
 
 ## Откат миграций
 

@@ -48,13 +48,18 @@ export default function Home() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      <div className="w-64 bg-white border-r border-gray-200 flex flex-col">
+    <div className="flex h-screen bg-gray-100" role="application" aria-label="ChatFlow приложение">
+      <aside
+        className="w-64 bg-white border-r border-gray-200 flex flex-col"
+        role="complementary"
+        aria-label="Боковая панель с тредами"
+      >
         <div className="p-4 border-b border-gray-200">
           <h1 className="text-xl font-bold mb-4">ChatFlow</h1>
           <button
             onClick={handleCreateThread}
-            className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition"
+            className="w-full bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition"
+            aria-label="Создать новый тред"
           >
             + Новый тред
           </button>
@@ -64,16 +69,20 @@ export default function Home() {
           selectedThreadId={selectedThreadId}
           onSelectThread={setSelectedThreadId}
         />
-      </div>
-      <div className="flex-1 flex flex-col">
+      </aside>
+      <main className="flex-1 flex flex-col" role="main" aria-label="Область чата">
         {selectedThreadId ? (
           <ChatInterface threadId={selectedThreadId} />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500">
+          <div
+            className="flex-1 flex items-center justify-center text-gray-500"
+            role="status"
+            aria-live="polite"
+          >
             Выберите тред или создайте новый
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }

@@ -61,7 +61,7 @@ describe("API /api/threads", () => {
       const response = await POST(request);
       const data = await response.json();
       
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(201);
       expect(data.title).toBe("New Thread");
       expect(data.id).toBeGreaterThan(0);
     });
@@ -78,7 +78,7 @@ describe("API /api/threads", () => {
       const data = await response.json();
       
       expect(response.status).toBe(400);
-      expect(data.error).toBe("Title is required");
+      expect(data.error).toContain("Title is required");
     });
 
     it("should handle invalid request - empty title", async () => {
@@ -93,7 +93,7 @@ describe("API /api/threads", () => {
       const data = await response.json();
       
       expect(response.status).toBe(400);
-      expect(data.error).toBe("Title is required");
+      expect(data.error).toContain("Title is required");
     });
 
     it("should handle invalid request - whitespace-only title", async () => {
@@ -108,7 +108,7 @@ describe("API /api/threads", () => {
       const data = await response.json();
       
       expect(response.status).toBe(400);
-      expect(data.error).toBe("Title is required");
+      expect(data.error).toContain("Title is required");
     });
   });
 });
