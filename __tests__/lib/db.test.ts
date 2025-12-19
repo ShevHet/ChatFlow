@@ -1,8 +1,8 @@
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 import { getDatabase, Thread, Message } from "@/lib/db";
 
 describe("Database", () => {
-  let testDb: Database.Database;
+  let testDb: Database;
   const testDbPath = ":memory:";
 
   beforeEach(() => {

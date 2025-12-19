@@ -2,7 +2,7 @@ import { GET, POST } from "@/app/api/threads/route";
 import { getDatabase } from "@/lib/db";
 
 jest.mock("@/lib/db", () => {
-  const Database = require("better-sqlite3");
+  const { Database } = require("bun:sqlite");
   const db = new Database(":memory:");
   db.exec(`
     CREATE TABLE IF NOT EXISTS threads (

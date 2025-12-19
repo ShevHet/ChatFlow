@@ -5,6 +5,8 @@ export enum ErrorType {
   VALIDATION = "VALIDATION",
   EXTERNAL_API = "EXTERNAL_API",
   UNKNOWN = "UNKNOWN",
+  NOT_FOUND = "NOT_FOUND",
+  INTERNAL_ERROR = "INTERNAL_ERROR",
 }
 
 export interface AppError {

@@ -3,11 +3,11 @@
  */
 
 import { ExcelService } from '@/lib/excel-service';
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 
 // Мокаем модуль db перед импортом ExcelService
 jest.mock('@/lib/db', () => {
-  const Database = require('better-sqlite3');
+  const { Database } = require('bun:sqlite');
   const db = new Database(':memory:');
   
   // Инициализируем схему
@@ -38,7 +38,7 @@ jest.mock('@/lib/db', () => {
 
 describe('ExcelService', () => {
   let excelService: ExcelService;
-  let db: Database.Database;
+  let db: Database;
 
   beforeEach(() => {
     // Получаем db из мока
@@ -120,7 +120,7 @@ describe('ExcelService', () => {
               if (callCount === 2) {
                 throw new Error('Database error');
               }
-              return stmt.run(...args);
+              return (stmt.run as (...args: unknown[]) => unknown).apply(stmt, args);
             }),
           };
         }

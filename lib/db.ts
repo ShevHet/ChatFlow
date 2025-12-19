@@ -1,16 +1,31 @@
 
-import Database from "better-sqlite3";
 import { createAppError } from "./error-handler";
 
-let db: Database.Database | null = null;
+type DBLike = {
+  exec: (sql: string) => void;
+  close: () => void;
+};
 
-export function getDatabase(): Database.Database {
+let DatabaseDriver: any;
+try {
+  // Bun runtime
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  DatabaseDriver = require("bun:sqlite").Database;
+} catch {
+  // Node runtime fallback
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  DatabaseDriver = require("better-sqlite3");
+}
+
+let db: DBLike | null = null;
+
+export function getDatabase(): DBLike {
   if (!db) {
     try {
-      db = new Database("chatflow.db");
-      db.pragma("foreign_keys = ON");
-      db.pragma("journal_mode = WAL");
-      initializeDatabase(db);
+      db = new DatabaseDriver("chatflow.db");
+      db.exec("PRAGMA foreign_keys = ON");
+      db.exec("PRAGMA journal_mode = WAL");
+      initializeDatabase(db as any);
     } catch (error) {
       if (db) {
         db.close();
@@ -23,7 +38,7 @@ export function getDatabase(): Database.Database {
   return db;
 }
 
-function initializeDatabase(database: Database.Database): void {
+function initializeDatabase(database: any): void {
   try {
     database.exec(`
       CREATE TABLE IF NOT EXISTS threads (

@@ -1,3 +1,9 @@
+/**
+ * Система управления миграциями базы данных
+ * 
+ * Предоставляет функциональность для применения и отката миграций схемы БД.
+ * Поддерживает версионирование и отслеживание примененных миграций.
+ * 
  * @example
  * ```sql
  * -- UP MIGRATION
@@ -8,9 +14,9 @@
  * ```
  */
 
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join } from 'path';
+import { join, isAbsolute } from 'path';
 import { createAppError } from './error-handler';
 
 /**
@@ -30,7 +36,7 @@ export interface MigrationRecord {
 }
 
 export class MigrationManager {
-  private db: Database.Database;
+  private db: Database;
   private migrationsPath: string;
 
   /**
@@ -40,9 +46,11 @@ export class MigrationManager {
    * @param migrationsPath - Путь к директории с файлами миграций (относительно process.cwd())
    * @throws Error если директория миграций не существует
    */
-  constructor(db: Database.Database, migrationsPath: string = 'migrations') {
+  constructor(db: Database, migrationsPath: string = 'migrations') {
     this.db = db;
-    this.migrationsPath = join(process.cwd(), migrationsPath);
+    this.migrationsPath = isAbsolute(migrationsPath)
+      ? migrationsPath
+      : join(process.cwd(), migrationsPath);
     
     // Проверяем существование директории миграций
     if (!existsSync(this.migrationsPath)) {

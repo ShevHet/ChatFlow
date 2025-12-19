@@ -1,10 +1,10 @@
-import Database from 'better-sqlite3';
+import { Database } from 'bun:sqlite';
 import { MigrationManager } from '../lib/migration-manager';
 
 const command = process.argv[2];
 const targetVersion = process.argv[3] ? parseInt(process.argv[3], 10) : undefined;
 
-const db = new Database('db.sqlite');
+const db = new Database('chatflow.db');
 const migrationManager = new MigrationManager(db);
 
 async function main() {

@@ -80,7 +80,7 @@ describe('error-handler', () => {
       expect(response.status).toBe(400);
     });
 
-    it('должен включать детали ошибки в режиме разработки', () => {
+    it('должен включать детали ошибки в режиме разработки', async () => {
       const originalError = new Error('Test error');
       const appError = {
         type: ErrorType.UNKNOWN,
@@ -89,12 +89,12 @@ describe('error-handler', () => {
       };
       
       const response = createErrorResponse(appError, true);
-      const body = JSON.parse(response.body as unknown as string);
+      const body = await response.json();
       
       expect(body.details).toBeDefined();
     });
 
-    it('не должен включать детали ошибки в продакшене', () => {
+    it('не должен включать детали ошибки в продакшене', async () => {
       const appError = {
         type: ErrorType.UNKNOWN,
         message: 'Test error',
@@ -102,12 +102,12 @@ describe('error-handler', () => {
       };
       
       const response = createErrorResponse(appError, false);
-      const body = JSON.parse(response.body as unknown as string);
+      const body = await response.json();
       
       expect(body.details).toBeUndefined();
     });
 
-    it('должен включать информацию о возможности повтора', () => {
+    it('должен включать информацию о возможности повтора', async () => {
       const appError = {
         type: ErrorType.NETWORK,
         message: 'Network error',
@@ -115,7 +115,7 @@ describe('error-handler', () => {
       };
       
       const response = createErrorResponse(appError);
-      const body = JSON.parse(response.body as unknown as string);
+      const body = await response.json();
       
       expect(body.retryable).toBe(true);
     });

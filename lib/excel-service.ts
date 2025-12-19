@@ -15,6 +15,7 @@
 
 import { createAppError, ErrorType } from './error-handler';
 import { getDatabase } from './db';
+import * as XLSX from 'xlsx';
 
 /**
  * Конфигурация для работы с Excel файлами
@@ -50,6 +51,8 @@ export interface ExcelProcessResult {
  * Метаданные Excel файла
  */
 export interface ExcelFileMetadata {
+  /** Идентификатор файла в БД */
+  fileId: number;
   /** Имя файла */
   filename: string;
   /** Размер файла в байтах */
@@ -182,26 +185,51 @@ export class ExcelService {
   }
 
   /**
-   * Парсит буфер Excel файла (заглушка для демонстрации)
+   * Парсит буфер Excel файла
    * 
-   * В реальной реализации здесь должен быть парсинг с использованием
-   * библиотеки для работы с Excel (xlsx, exceljs и т.д.)
+   * Использует библиотеку xlsx для парсинга Excel файлов.
+   * Поддерживает форматы .xlsx, .xls, .csv и другие форматы, поддерживаемые библиотекой.
    * 
    * @param buffer - Буфер с содержимым файла
    * @returns Массив объектов с данными строк
+   * @throws Error если файл не может быть прочитан или поврежден
    */
   private parseExcelBuffer(buffer: Buffer): Array<Record<string, unknown>> {
-    // ЗАГЛУШКА: В реальной реализации здесь должен быть парсинг Excel
-    // Для демонстрации возвращаем пустой массив
-    // 
-    // Пример реальной реализации с xlsx:
-    // const XLSX = require('xlsx');
-    // const workbook = XLSX.read(buffer, { type: 'buffer' });
-    // const sheetName = workbook.SheetNames[0];
-    // const sheet = workbook.Sheets[sheetName];
-    // return XLSX.utils.sheet_to_json(sheet);
-    
-    return [];
+    try {
+      // Читаем workbook из буфера
+      const workbook = XLSX.read(buffer, { 
+        type: 'buffer',
+        cellDates: true,
+        cellNF: false,
+        cellText: false
+      });
+
+      if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+        throw new Error('Excel file has no sheets');
+      }
+
+      // Используем первый лист (можно расширить для поддержки нескольких листов)
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+
+      if (!sheet) {
+        throw new Error(`Sheet "${sheetName}" not found`);
+      }
+
+      // Преобразуем лист в JSON массив объектов
+      // defval: '' - значения по умолчанию для пустых ячеек
+      // raw: false - преобразуем значения в строки
+      const data = XLSX.utils.sheet_to_json(sheet, {
+        defval: '',
+        raw: false,
+        dateNF: 'yyyy-mm-dd',
+      }) as Array<Record<string, unknown>>;
+
+      return data;
+    } catch (error) {
+      const appError = createAppError(error, "excel parsing");
+      throw new Error(`Failed to parse Excel file: ${appError.message}`);
+    }
   }
 
   /**
@@ -260,26 +288,20 @@ export class ExcelService {
         // Обрабатываем данные батчами для оптимизации
         for (let i = 0; i < data.length; i += this.config.batchSize) {
           const batch = data.slice(i, i + this.config.batchSize);
-          
-          // Используем prepared statement для каждого батча
-          const batchStmt = this.db.transaction((batchData: Array<Record<string, unknown>>) => {
-            for (let j = 0; j < batchData.length; j++) {
-              try {
-                insertDataStmt.run(
-                  fileId,
-                  i + j,
-                  JSON.stringify(batchData[j])
-                );
-                rowsSaved++;
-              } catch (error) {
-                rowsWithErrors++;
-                const errorMsg = error instanceof Error ? error.message : String(error);
-                errors.push(`Row ${i + j}: ${errorMsg}`);
-              }
+          for (let j = 0; j < batch.length; j++) {
+            try {
+              insertDataStmt.run(
+                fileId,
+                i + j,
+                JSON.stringify(batch[j])
+              );
+              rowsSaved++;
+            } catch (error) {
+              rowsWithErrors++;
+              const errorMsg = error instanceof Error ? error.message : String(error);
+              errors.push(`Row ${i + j}: ${errorMsg}`);
             }
-          });
-
-          batchStmt(batch);
+          }
         }
 
         // Подтверждаем транзакцию
@@ -360,6 +382,7 @@ export class ExcelService {
       }
 
       return {
+        fileId: row.id,
         filename: row.filename,
         size: row.size,
         rowCount: row.row_count,
@@ -370,6 +393,120 @@ export class ExcelService {
     } catch (error) {
       const appError = createAppError(error, "excel metadata retrieval");
       throw new Error(`Failed to get Excel file metadata: ${appError.message}`);
+    }
+  }
+
+  /**
+   * Получает список всех Excel файлов из БД
+   * 
+   * @returns Массив метаданных всех файлов
+   */
+  getAllExcelFiles(): ExcelFileMetadata[] {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT id, filename, size, row_count, column_count, headers, uploaded_at
+        FROM excel_files
+        ORDER BY uploaded_at DESC
+      `);
+      
+      const rows = stmt.all() as Array<{
+        id: number;
+        filename: string;
+        size: number;
+        row_count: number;
+        column_count: number;
+        headers: string;
+        uploaded_at: number;
+      }>;
+
+      return rows.map(row => ({
+        fileId: row.id,
+        filename: row.filename,
+        size: row.size,
+        rowCount: row.row_count,
+        columnCount: row.column_count,
+        headers: JSON.parse(row.headers) as string[],
+        uploadedAt: row.uploaded_at,
+      }));
+    } catch (error) {
+      const appError = createAppError(error, "excel files list retrieval");
+      throw new Error(`Failed to get Excel files list: ${appError.message}`);
+    }
+  }
+
+  /**
+   * Получает данные Excel файла с метаданными для работы с ячейками
+   * 
+   * @param fileId - Идентификатор файла в БД
+   * @returns Объект с данными файла или null, если файл не найден
+   */
+  getExcelFileData(fileId: number): {
+    fileId: number;
+    filename: string;
+    sheetName: string;
+    headers: string[];
+    data: Array<Record<string, unknown>>;
+    rowCount: number;
+    columnCount: number;
+  } | null {
+    try {
+      const metadata = this.getExcelFileMetadata(fileId);
+      if (!metadata) {
+        return null;
+      }
+
+      const data = this.getExcelData(fileId, 0, 10000);
+
+      return {
+        fileId: metadata.fileId,
+        filename: metadata.filename,
+        sheetName: 'Sheet1',
+        headers: metadata.headers,
+        data,
+        rowCount: metadata.rowCount,
+        columnCount: metadata.columnCount,
+      };
+    } catch (error) {
+      const appError = createAppError(error, "excel file data retrieval");
+      throw new Error(`Failed to get Excel file data: ${appError.message}`);
+    }
+  }
+
+  /**
+   * Обновляет значение ячейки в Excel данных в БД
+   * 
+   * @param fileId - Идентификатор файла в БД
+   * @param rowIndex - Индекс строки (0-based, не считая заголовок)
+   * @param columnKey - Ключ столбца (название заголовка)
+   * @param value - Новое значение
+   * @throws Error если файл не найден или не удалось обновить
+   */
+  updateExcelCell(fileId: number, rowIndex: number, columnKey: string, value: unknown): void {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT id, data FROM excel_data
+        WHERE file_id = ? AND row_index = ?
+      `);
+      
+      const row = stmt.get(fileId, rowIndex) as { id: number; data: string } | undefined;
+      
+      if (!row) {
+        throw new Error(`Row ${rowIndex} not found in file ${fileId}`);
+      }
+
+      const rowData = JSON.parse(row.data) as Record<string, unknown>;
+      rowData[columnKey] = value;
+
+      const updateStmt = this.db.prepare(`
+        UPDATE excel_data SET data = ? WHERE id = ?
+      `);
+      updateStmt.run(JSON.stringify(rowData), row.id);
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('not found')) {
+        throw error;
+      }
+      const appError = createAppError(error, "excel cell update");
+      throw new Error(`Failed to update Excel cell: ${appError.message}`);
     }
   }
 

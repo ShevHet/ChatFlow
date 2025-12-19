@@ -1,8 +1,8 @@
 import { getDatabase, Thread, Message } from "@/lib/db";
-import Database from "better-sqlite3";
+import { Database } from "bun:sqlite";
 
 describe("Database Integration", () => {
-  let originalDb: Database.Database | null = null;
+let originalDb: Database | null = null;
 
   beforeAll(() => {
     originalDb = new Database(":memory:");

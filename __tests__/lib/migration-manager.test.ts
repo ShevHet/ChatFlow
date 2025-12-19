@@ -10,30 +10,28 @@
  */
 
 import { MigrationManager, Migration } from "@/lib/migration-manager";
-import Database from "better-sqlite3";
-import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, readdirSync } from "fs";
+import { Database } from "bun:sqlite";
+import { readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync, existsSync, readdirSync } from "fs";
+import { rm } from "fs/promises";
 import { join } from "path";
+import { tmpdir } from "os";
 
 describe("MigrationManager", () => {
-  let db: Database.Database;
+  let db: Database;
   let migrationsPath: string;
   let manager: MigrationManager;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     // Создаем временную БД в памяти
     db = new Database(":memory:");
 
-    // Создаем временную директорию для миграций
-    migrationsPath = join(process.cwd(), "test-migrations");
-    if (existsSync(migrationsPath)) {
-      rmSync(migrationsPath, { recursive: true, force: true });
-    }
-    mkdirSync(migrationsPath, { recursive: true });
+    // Создаем уникальную временную директорию для миграций вне OneDrive
+    migrationsPath = mkdtempSync(join(tmpdir(), "chatflow-migrations-"));
 
     // Создаем тестовые миграции
     createTestMigrations();
 
-    manager = new MigrationManager(db, "test-migrations");
+    manager = new MigrationManager(db, migrationsPath);
   });
 
   afterEach(() => {
